@@ -1,0 +1,75 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JSON 필드 탐색기</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="title">
+        <p class="kicker">JSON FIELD EXPLORER</p>
+        <h1>JSON 필드 탐색기</h1>
+        <p class="subtitle">JSON 파일을 올리면 계층을 펼치며 구조를 탐색할 수 있어요.</p>
+      </div>
+      <div class="controls">
+        <label class="file-btn">
+          JSON 파일 선택
+          <input type="file" id="fileInput" accept="application/json,.json" />
+        </label>
+        <button id="btn-clear" class="ghost-btn" type="button">비우기</button>
+        <div class="meta">
+          <span id="file-name">파일 없음</span>
+          <span id="node-count">노드: -</span>
+          <span id="depth-count">깊이: -</span>
+          <span id="status">대기</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="toolbar">
+      <div class="search-bar">
+        <input id="searchInput" type="search" placeholder="키/값 검색" autocomplete="off" />
+        <select id="searchMode">
+          <option value="all">키 + 값</option>
+          <option value="key">키만</option>
+          <option value="value">값만</option>
+        </select>
+        <label class="check">
+          <input id="searchRegex" type="checkbox" />
+          정규식
+        </label>
+        <label class="check">
+          <input id="searchCase" type="checkbox" />
+          대소문자
+        </label>
+        <button id="btn-clear-search" class="ghost-btn small" type="button">검색 초기화</button>
+        <button id="btn-export-json" class="ghost-btn small" type="button">JSON 내보내기</button>
+        <button id="btn-export-csv" class="ghost-btn small" type="button">CSV 내보내기</button>
+      </div>
+      <div class="filter-bar">
+        <span class="filter-title">타입 필터</span>
+        <label class="check"><input class="type-filter" type="checkbox" value="object" checked />object</label>
+        <label class="check"><input class="type-filter" type="checkbox" value="array" checked />array</label>
+        <label class="check"><input class="type-filter" type="checkbox" value="string" checked />string</label>
+        <label class="check"><input class="type-filter" type="checkbox" value="number" checked />number</label>
+        <label class="check"><input class="type-filter" type="checkbox" value="boolean" checked />boolean</label>
+        <label class="check"><input class="type-filter" type="checkbox" value="null" checked />null</label>
+        <label class="check"><input class="type-filter" type="checkbox" value="undefined" checked />undefined</label>
+        <label class="check"><input class="type-filter" type="checkbox" value="other" checked />other</label>
+        <label class="check"><input id="resultsOnly" type="checkbox" />결과만 보기</label>
+      </div>
+    </section>
+
+    <main class="workspace">
+      <section id="explorer" class="explorer is-empty" aria-live="polite"></section>
+    </main>
+  </div>
+
+  <script type="module" src="/src/app.ts"></script>
+</body>
+</html>
+
+
