@@ -10,7 +10,6 @@ npm install
 npm run dev
 ```
 - 브라우저에서 `http://localhost:5173/` 접속
-- TypeScript를 직접 실행할 수 없어서 단순 `python -m http.server`만으로는 동작하지 않습니다.
 
 ## 빌드
 ```cmd
