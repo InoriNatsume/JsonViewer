@@ -1,8 +1,11 @@
 ﻿# JSON 필드 탐색기
 
+## Pages
+https://inorinatsume.github.io/JsonViewer/
+
 ## 로컬 실행 (Vite)
 ```cmd
-cd C:\Users\kazuk\Downloads\exifviewer
+cd 프로젝트 루트
 npm install
 npm run dev
 ```
@@ -16,6 +19,3 @@ npm run preview
 ```
 - 프리뷰는 `http://localhost:4173/`
 
-## GitHub Pages
-- `pages.yml` 워크플로가 빌드 후 `dist/`를 Pages로 배포합니다.
-- 저장소 설정에서 Pages를 활성화하세요.
