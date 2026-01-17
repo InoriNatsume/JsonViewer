@@ -1,4 +1,4 @@
-import { formatValue, type KeyNode, type TreeBuildResult } from '../core/tree';
+import { formatValue, loadChildren, hasChildrenPotential, type KeyNode, type TreeBuildResult } from '../core/tree';
 import { copyToClipboard } from './dom';
 import { expandMatches, focusOnNode, setAllDetails, updateChildRowHighlights } from './tree-helpers';
 import type { NodeElementEntry } from './types';
@@ -12,6 +12,7 @@ export type ExplorerLabels = {
   expandMatches: string;
   searchTitle: string;
   recentTitle: string;
+  schemaTitle: string;
   emptyDetail: string;
   copyPath: string;
   detailPath: string;
@@ -30,6 +31,7 @@ export type ExplorerView = {
   resultMetaEl: HTMLDivElement;
   resultListEl: HTMLDivElement;
   recentListEl: HTMLDivElement;
+  schemaListEl: HTMLDivElement;
   openTab: (node: KeyNode, options?: { skipFocus?: boolean }) => void;
 };
 
@@ -41,7 +43,7 @@ type ExplorerViewOptions = {
   pinnedPaths: Set<string>;
   isResultsOnlyActive: () => boolean;
   applyResultsOnlyVisibility: (matchPaths: Set<string>, enabled: boolean) => void;
-  addRecentPath: (path: string) => void;
+  setCurrentLocation: (path: string) => void;
   setStatus: (text: string) => void;
   labels: ExplorerLabels;
 };
@@ -55,7 +57,7 @@ export function renderExplorerView(options: ExplorerViewOptions): ExplorerView {
     pinnedPaths,
     isResultsOnlyActive,
     applyResultsOnlyVisibility,
-    addRecentPath,
+    setCurrentLocation,
     setStatus,
     labels,
   } = options;
@@ -134,85 +136,48 @@ export function renderExplorerView(options: ExplorerViewOptions): ExplorerView {
   recentPanel.appendChild(recentTitle);
   recentPanel.appendChild(recentList);
 
+  const schemaPanel = document.createElement('div');
+  schemaPanel.className = 'panel-block schema-panel';
+  const schemaTitleEl = document.createElement('div');
+  schemaTitleEl.className = 'panel-title';
+  schemaTitleEl.textContent = labels.schemaTitle;
+  const schemaList = document.createElement('div');
+  schemaList.className = 'schema-list';
+  schemaPanel.appendChild(schemaTitleEl);
+  schemaPanel.appendChild(schemaList);
+
   detailPanel.appendChild(searchPanel);
+  detailPanel.appendChild(schemaPanel);
   detailPanel.appendChild(recentPanel);
 
-  const tabsBar = document.createElement('div');
-  tabsBar.className = 'key-tabs';
-  const contents = document.createElement('div');
-  contents.className = 'key-tab-contents';
+  const detailContent = document.createElement('div');
+  detailContent.className = 'key-detail-content';
   const emptyState = document.createElement('div');
   emptyState.className = 'key-empty';
   emptyState.textContent = labels.emptyDetail;
 
   detailPane.appendChild(detailPanel);
-  detailPane.appendChild(tabsBar);
-  detailPane.appendChild(contents);
+  detailPane.appendChild(detailContent);
   detailPane.appendChild(emptyState);
 
   layout.appendChild(treePane);
   layout.appendChild(detailPane);
   explorerEl.appendChild(layout);
 
-  const openTabs = new Map<string, { tab: HTMLElement; btn: HTMLButtonElement; content: HTMLElement }>();
-  let activeId: string | null = null;
+  let currentNode: KeyNode | null = null;
 
-  function setActive(id: string) {
-    activeId = id;
-    openTabs.forEach((tab, key) => {
-      tab.btn.classList.toggle('active', key === id);
-      tab.content.classList.toggle('active', key === id);
-    });
-    emptyState.style.display = openTabs.size > 0 ? 'none' : 'block';
-  }
-
-  function closeTab(id: string) {
-    const tab = openTabs.get(id);
-    if (!tab) return;
-    tab.tab.remove();
-    tab.content.remove();
-    openTabs.delete(id);
-    if (activeId === id) {
-      const next = openTabs.keys().next().value ?? null;
-      if (next) {
-        setActive(next);
-      } else {
-        emptyState.style.display = 'block';
-      }
-    }
+  function showDetail(node: KeyNode) {
+    currentNode = node;
+    detailContent.innerHTML = '';
+    detailContent.appendChild(buildDetail(node));
+    emptyState.style.display = 'none';
+    detailContent.style.display = 'block';
   }
 
   function openTab(node: KeyNode, options: { skipFocus?: boolean } = {}) {
     const id = node.path || '(root)';
-    if (!openTabs.has(id)) {
-      const tab = document.createElement('div');
-      tab.className = 'key-tab';
-      const btn = document.createElement('button');
-      btn.className = 'key-tab-btn';
-      btn.textContent = id;
-      const close = document.createElement('button');
-      close.className = 'key-tab-close';
-      close.textContent = 'x';
-      tab.appendChild(btn);
-      tab.appendChild(close);
-      tabsBar.appendChild(tab);
-
-      const content = document.createElement('div');
-      content.className = 'key-tab-content';
-      content.dataset.tabId = id;
-      content.appendChild(buildDetail(node));
-      contents.appendChild(content);
-
-      btn.addEventListener('click', () => setActive(id));
-      close.addEventListener('click', (event) => {
-        event.stopPropagation();
-        closeTab(id);
-      });
-
-      openTabs.set(id, { tab, btn, content });
-    }
-    setActive(id);
-    addRecentPath(id);
+    showDetail(node);
+    setCurrentLocation(id);
     if (!options.skipFocus) {
       focusOnNode(nodeElements, id);
     }
@@ -306,23 +271,76 @@ export function renderExplorerView(options: ExplorerViewOptions): ExplorerView {
     return tr;
   }
 
+  // 경로에서 깊이 계산
+  function getDepthFromPath(path: string): number {
+    if (path === '(root)') return 0;
+    let depth = 1; // 첫 번째 키부터 깊이 1
+    for (let i = 0; i < path.length; i++) {
+      if (path[i] === '.' || path[i] === '[') {
+        depth++;
+      }
+    }
+    // '['로 시작하는 경우 보정 (예: (root)[0])
+    if (path.includes('(root)[')) {
+      depth--; // (root)[ 후의 첫 번째가 깊이 1
+    }
+    return depth;
+  }
+
   function renderNode(node: KeyNode, parent: HTMLElement) {
-    const hasChildren = node.children.length > 0;
-    if (hasChildren) {
+    const hasPotentialChildren = hasChildrenPotential(node);
+    const depth = getDepthFromPath(node.path);
+    
+    if (hasPotentialChildren) {
       const details = document.createElement('details');
       details.className = 'key-node';
       details.dataset.path = node.path;
       if (node.path === '(root)') details.open = true;
+      
       const summary = document.createElement('summary');
-      summary.textContent = `${node.key} (${node.type})`;
-      summary.addEventListener('click', () => {
+      
+      // 깊이 뱃지 추가
+      const depthBadge = document.createElement('span');
+      depthBadge.className = 'tree-depth-badge';
+      depthBadge.textContent = String(depth);
+      
+      const nodeText = document.createTextNode(` ${node.key} (${node.type})`);
+      summary.appendChild(depthBadge);
+      summary.appendChild(nodeText);
+      
+      summary.addEventListener('click', (e) => {
+        // 상세 탭 열기
         openTab(node, { skipFocus: true });
       });
       details.appendChild(summary);
+      
       const childWrap = document.createElement('div');
       childWrap.className = 'key-children';
-      node.children.forEach((child) => renderNode(child, childWrap));
+      childWrap.dataset.loaded = 'false';
       details.appendChild(childWrap);
+      
+      // 펼칠 때 자식 로드 (선택적 로딩)
+      details.addEventListener('toggle', () => {
+        if (details.open && childWrap.dataset.loaded === 'false') {
+          childWrap.dataset.loaded = 'true';
+          const children = loadChildren(node);
+          children.forEach((child) => {
+            nodeByPath.set(child.path, child);
+            renderNode(child, childWrap);
+          });
+        }
+      });
+      
+      // 루트는 이미 열려있으므로 즉시 자식 로드
+      if (node.path === '(root)') {
+        childWrap.dataset.loaded = 'true';
+        const children = loadChildren(node);
+        children.forEach((child) => {
+          nodeByPath.set(child.path, child);
+          renderNode(child, childWrap);
+        });
+      }
+      
       parent.appendChild(details);
       allDetails.push(details);
       nodeElements.set(node.path, { label: summary, container: details, isLeaf: false });
@@ -332,7 +350,14 @@ export function renderExplorerView(options: ExplorerViewOptions): ExplorerView {
     const item = document.createElement('div');
     item.className = 'key-leaf';
     item.dataset.path = node.path;
-    item.textContent = `${node.key} (${node.type})`;
+    
+    // 깊이 뱃지 추가
+    const depthBadge = document.createElement('span');
+    depthBadge.className = 'tree-depth-badge';
+    depthBadge.textContent = String(depth);
+    item.appendChild(depthBadge);
+    item.appendChild(document.createTextNode(` ${node.key} (${node.type})`));
+    
     item.addEventListener('click', () => openTab(node));
     parent.appendChild(item);
     nodeElements.set(node.path, { label: item, container: item, isLeaf: true });
@@ -341,7 +366,11 @@ export function renderExplorerView(options: ExplorerViewOptions): ExplorerView {
   flatNodes.forEach((node) => nodeByPath.set(node.path, node));
   renderNode(result.root, treePane);
 
-  expandAllBtn.addEventListener('click', () => setAllDetails(allDetails, true));
+  expandAllBtn.addEventListener('click', () => {
+    // 현재 로드된 노드만 펼침 (선택적 로딩이므로 전체 펼치기는 로드된 것만)
+    setAllDetails(allDetails, true);
+    setStatus('로드된 노드만 펼쳐집니다');
+  });
   collapseAllBtn.addEventListener('click', () => setAllDetails(allDetails, false));
   expandMatchBtn.addEventListener('click', () => expandMatches(nodeElements, currentMatchPaths));
 
@@ -352,6 +381,7 @@ export function renderExplorerView(options: ExplorerViewOptions): ExplorerView {
     resultMetaEl: searchMeta,
     resultListEl: searchList,
     recentListEl: recentList,
+    schemaListEl: schemaList,
     openTab,
   };
 }
